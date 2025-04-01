@@ -10,8 +10,8 @@ Keycloak. To use these Keycloak resources you simply need to
 use the following two commands.
 
 ```
-oc create -k https://github.com/securesign/sigstore-ocp/keycloak/operator/base
-oc create -k https://github.com/securesign/sigstore-ocp/keycloak/resources/base
+oc create -k https://github.com/securesign/demo-resources/keycloak/operator/base
+oc create -k https://github.com/securesign/demo-resources/keycloak/resources/base
 ```
 
 This should install the Keycloak operator, and create a new
