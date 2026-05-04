@@ -11,11 +11,13 @@ use the following two commands.
 
 ```
 oc create -k https://github.com/securesign/demo-resources/keycloak/operator/base
+Confirm rhsso-operator is up and running "oc get pods -n keycloak-system"
 oc create -k https://github.com/securesign/demo-resources/keycloak/resources/base
 ```
 
 This should install the Keycloak operator, and create a new
 user with the email `jdoe@redhat.com` and a password of
-`password`. Once installed, you should be able to set Keycloak
-as your OIDC provider when installing RHTAS.
+`secure`. Once installed, you should be able to set Keycloak
+as your OIDC provider when installing RHTAS. You will 3 pods in the keycloak-system namespace:
+rhsso-operator, keycloak & keycloak-postgresql
 
