@@ -1,0 +1,14 @@
+apiVersion: mirror.openshift.io/v2alpha1
+kind: ImageSetConfiguration
+mirror:
+  operators:
+    - catalog: registry.redhat.io/redhat/redhat-operator-index:v${OCP_VERSION}
+      packages:
+        - name: rhtas-operator
+          defaultChannel: ${RHTAS_OPERATOR_CHANNEL}
+          channels:
+            - name: ${RHTAS_OPERATOR_CHANNEL}
+        - name: policy-controller-operator
+          defaultChannel: ${POLICY_CONTROLLER_CHANNEL}
+          channels:
+            - name: ${POLICY_CONTROLLER_CHANNEL}

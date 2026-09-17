@@ -1,0 +1,23 @@
+# Negative scenario 2: an image signed keylessly, but by a Keycloak identity
+# the ClusterImagePolicy does not authorize. Admission should be blocked.
+# A valid signature exists, but the identity check fails.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wrong-identity-app
+  namespace: ${DEMO_NAMESPACE}
+  labels:
+    app: wrong-identity-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wrong-identity-app
+  template:
+    metadata:
+      labels:
+        app: wrong-identity-app
+    spec:
+      containers:
+        - name: app
+          image: "${WRONG_IDENTITY_IMAGE}"

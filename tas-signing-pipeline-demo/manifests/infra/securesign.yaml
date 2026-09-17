@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${TAS_NAMESPACE}
+---
+apiVersion: rhtas.redhat.com/v1alpha1
+kind: Securesign
+metadata:
+  name: trusted-artifact-signer
+  namespace: ${TAS_NAMESPACE}
+  labels:
+    app.kubernetes.io/instance: trusted-artifact-signer
+    app.kubernetes.io/name: trusted-artifact-signer
+    app.kubernetes.io/part-of: trusted-artifact-signer
+spec:
+  ctlog:
+    monitoring:
+      enabled: false
+  fulcio:
+    certificate:
+      commonName: fulcio-tas-signing-demo.${APPS_DOMAIN}
+      organizationEmail: rhtas@redhat.com
+      organizationName: Red Hat
+    config:
+      OIDCIssuers:
+        - ClientID: trusted-artifact-signer
+          Issuer: 'https://keycloak-${KEYCLOAK_NAMESPACE}.${APPS_DOMAIN}/auth/realms/trusted-artifact-signer'
+          IssuerURL: 'https://keycloak-${KEYCLOAK_NAMESPACE}.${APPS_DOMAIN}/auth/realms/trusted-artifact-signer'
+          Type: email
+    externalAccess:
+      enabled: true
+    monitoring:
+      enabled: false
+  rekor:
+    backFillRedis:
+      enabled: false
+      schedule: 0 0 * * *
+    externalAccess:
+      enabled: true
+    monitoring:
+      enabled: false
+    rekorSearchUI:
+      enabled: true
+    signer:
+      kms: secret
+  trillian:
+    database:
+      create: true
+    monitoring:
+      enabled: false
+  tsa:
+    externalAccess:
+      enabled: true
+    monitoring:
+      enabled: false
+    signer:
+      certificateChain:
+        intermediateCA:
+          - commonName: tsa-server-tas-signing-demo.${APPS_DOMAIN}
+            organizationEmail: rhtas@redhat.com
+            organizationName: Red Hat
+        leafCA:
+          commonName: tsa-server-tas-signing-demo.${APPS_DOMAIN}
+          organizationEmail: rhtas@redhat.com
+          organizationName: Red Hat
+        rootCA:
+          commonName: tsa-server-tas-signing-demo.${APPS_DOMAIN}
+          organizationEmail: rhtas@redhat.com
+          organizationName: Red Hat
+  tuf:
+    externalAccess:
+      enabled: true
+    keys:
+      - name: rekor.pub
+      - name: ctfe.pub
+      - name: fulcio_v1.crt.pem
+      - name: tsa.certchain.pem

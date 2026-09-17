@@ -1,0 +1,25 @@
+apiVersion: rhtas.charts.redhat.com/v1alpha1
+kind: PolicyController
+metadata:
+  name: policycontroller-sample
+  namespace: ${POLICY_CONTROLLER_NAMESPACE}
+spec:
+  policy-controller:
+    cosign:
+      webhookName: policy.rhtas.com
+    webhook:
+      extraArgs:
+        mutating-webhook-name: defaulting.clusterimagepolicy.rhtas.com
+        validating-webhook-name: validating.clusterimagepolicy.rhtas.com
+        webhook-name: policy.rhtas.com
+      failurePolicy: Fail
+      name: webhook
+      namespaceSelector:
+        matchExpressions:
+          - key: policy.rhtas.com/include
+            operator: In
+            values:
+              - "true"
+      webhookNames:
+        defaulting: defaulting.clusterimagepolicy.rhtas.com
+        validating: validating.clusterimagepolicy.rhtas.com

@@ -1,0 +1,207 @@
+# Tekton Pipeline demonstrating build -> push -> keyless-sign against
+# the local RHTAS environment.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: build-sign-image
+  namespace: ${DEMO_NAMESPACE}
+spec:
+  params:
+    - name: image-ref
+      description: Fully-qualified destination image (registry/repo:tag), no digest.
+      type: string
+    - name: keycloak-token-url
+      type: string
+    - name: oidc-client-id
+      type: string
+      default: trusted-artifact-signer
+    - name: tuf-mirror-url
+      type: string
+    - name: tuf-root-url
+      type: string
+    - name: fulcio-url
+      type: string
+    - name: rekor-url
+      type: string
+    - name: tsa-url
+      description: RFC3161 timestamp endpoint cosign expects, i.e. TSA's status.url plus /api/v1/timestamp.
+      type: string
+    - name: cosign-image
+      description: Pre-staged cosign image reference hosted in zot (no public registry access at run time).
+      type: string
+    - name: curl-image
+      description: Pre-staged curl image reference hosted in zot (no public registry access at run time).
+      type: string
+  workspaces:
+    - name: source
+      description: Read-only Containerfile + build context.
+  volumes:
+    - name: varlibcontainers
+      emptyDir: {}
+    - name: sigstorehome
+      emptyDir: {}
+  results:
+    - name: image-digest
+      description: Digest of the pushed (unsigned) image manifest.
+      value: "$(steps.push-and-resolve-digest.results.image-digest)"
+    - name: signed-image
+      description: image-ref@digest that was signed.
+      value: "$(steps.push-and-resolve-digest.results.image-ref-digest)"
+  steps:
+    - name: build
+      image: quay.io/buildah/stable:latest
+      workingDir: $(workspaces.source.path)
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+      script: |
+        #!/bin/bash
+        set -euxo pipefail
+        buildah bud -f Containerfile -t "$(params.image-ref)" .
+
+    - name: push-and-resolve-digest
+      image: quay.io/buildah/stable:latest
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+      results:
+        - name: image-digest
+          description: sha256:... digest of the pushed manifest.
+        - name: image-ref-digest
+          description: image-ref@digest of the pushed manifest, pre-joined here because
+            Task-level results can't concatenate a param with a step result.
+      script: |
+        #!/bin/bash
+        set -euxo pipefail
+        buildah push --tls-verify=true --digestfile=/tmp/image.digest "$(params.image-ref)" "docker://$(params.image-ref)"
+        digest="$(cat /tmp/image.digest)"
+        [[ -n "$digest" ]] || { echo "could not resolve pushed image digest" >&2; exit 1; }
+        printf '%s' "$digest" | tee "$(step.results.image-digest.path)"
+        printf '%s' "$(params.image-ref)@${digest}" | tee "$(step.results.image-ref-digest.path)"
+
+    - name: get-oidc-token
+      image: $(params.curl-image)
+      env:
+        - name: SIGNER_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: signer-credentials
+              key: username
+        - name: SIGNER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: signer-credentials
+              key: password
+      results:
+        - name: id-token
+          description: Keycloak OIDC id_token for the signer identity.
+      script: |
+        #!/bin/sh
+        set -eu
+        resp="$(curl -sf -X POST "$(params.keycloak-token-url)" \
+          --data-urlencode "grant_type=password" \
+          --data-urlencode "client_id=$(params.oidc-client-id)" \
+          --data-urlencode "username=${SIGNER_USERNAME}" \
+          --data-urlencode "password=${SIGNER_PASSWORD}" \
+          --data-urlencode "scope=openid email")"
+        token="$(printf '%s' "$resp" | grep -o '"id_token":"[^"]*"' | cut -d'"' -f4)"
+        [ -n "$token" ] || { echo "failed to obtain id_token: $resp" >&2; exit 1; }
+        printf '%s' "$token" | tee "$(step.results.id-token.path)" >/dev/null
+
+    - name: cosign-initialize
+      image: $(params.cosign-image)
+      command: ["cosign"]
+      args:
+        - "initialize"
+        - "--mirror=$(params.tuf-mirror-url)"
+        - "--root=$(params.tuf-root-url)"
+      env:
+        - name: HOME
+          value: /sigstorehome
+      volumeMounts:
+        - name: sigstorehome
+          mountPath: /sigstorehome
+
+    - name: cosign-sign
+      image: $(params.cosign-image)
+      command: ["cosign"]
+      args:
+        - "sign"
+        - "--yes"
+        - "--fulcio-url=$(params.fulcio-url)"
+        - "--rekor-url=$(params.rekor-url)"
+        - "--timestamp-server-url=$(params.tsa-url)"
+        - "--identity-token=$(steps.get-oidc-token.results.id-token)"
+        - "$(params.image-ref)@$(steps.push-and-resolve-digest.results.image-digest)"
+      env:
+        - name: HOME
+          value: /sigstorehome
+      volumeMounts:
+        - name: sigstorehome
+          mountPath: /sigstorehome
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: build-sign
+  namespace: ${DEMO_NAMESPACE}
+spec:
+  params:
+    - name: image-ref
+      type: string
+    - name: keycloak-token-url
+      type: string
+    - name: oidc-client-id
+      type: string
+      default: trusted-artifact-signer
+    - name: tuf-mirror-url
+      type: string
+    - name: tuf-root-url
+      type: string
+    - name: fulcio-url
+      type: string
+    - name: rekor-url
+      type: string
+    - name: tsa-url
+      type: string
+    - name: cosign-image
+      type: string
+    - name: curl-image
+      type: string
+  workspaces:
+    - name: source
+  results:
+    - name: signed-image
+      value: "$(tasks.build-and-sign.results.signed-image)"
+  tasks:
+    - name: build-and-sign
+      taskRef:
+        name: build-sign-image
+      params:
+        - name: image-ref
+          value: "$(params.image-ref)"
+        - name: keycloak-token-url
+          value: "$(params.keycloak-token-url)"
+        - name: oidc-client-id
+          value: "$(params.oidc-client-id)"
+        - name: tuf-mirror-url
+          value: "$(params.tuf-mirror-url)"
+        - name: tuf-root-url
+          value: "$(params.tuf-root-url)"
+        - name: fulcio-url
+          value: "$(params.fulcio-url)"
+        - name: rekor-url
+          value: "$(params.rekor-url)"
+        - name: tsa-url
+          value: "$(params.tsa-url)"
+        - name: cosign-image
+          value: "$(params.cosign-image)"
+        - name: curl-image
+          value: "$(params.curl-image)"
+      workspaces:
+        - name: source
+          workspace: source

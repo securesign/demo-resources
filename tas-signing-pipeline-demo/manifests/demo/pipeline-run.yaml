@@ -1,0 +1,34 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: build-sign-
+  namespace: ${DEMO_NAMESPACE}
+spec:
+  serviceAccountName: pipeline
+  pipelineRef:
+    name: build-sign
+  params:
+    - name: image-ref
+      value: "${SAMPLE_IMAGE_REF}"
+    - name: keycloak-token-url
+      value: "${KEYCLOAK_TOKEN_URL}"
+    - name: oidc-client-id
+      value: "${OIDC_CLIENT_ID}"
+    - name: tuf-mirror-url
+      value: "${TUF_MIRROR_URL}"
+    - name: tuf-root-url
+      value: "${TUF_ROOT_URL}"
+    - name: fulcio-url
+      value: "https://${FULCIO_ROUTE}"
+    - name: rekor-url
+      value: "https://${REKOR_ROUTE}"
+    - name: tsa-url
+      value: "${TSA_URL}"
+    - name: cosign-image
+      value: "${COSIGN_ZOT_IMAGE}"
+    - name: curl-image
+      value: "${CURL_ZOT_IMAGE}"
+  workspaces:
+    - name: source
+      configMap:
+        name: sample-app-source

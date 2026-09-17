@@ -1,0 +1,8 @@
+apiVersion: policy.sigstore.dev/v1alpha1
+kind: TrustRoot
+metadata:
+  name: ${TRUST_ROOT_NAME}
+spec:
+  remote:
+    mirror: "${TUF_MIRROR_URL}"
+    root: "${TUF_ROOT_JSON_B64}"

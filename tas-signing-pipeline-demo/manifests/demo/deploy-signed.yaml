@@ -1,0 +1,23 @@
+# Positive scenario: the pipeline-built, cosign-signed image. Admission
+# should pass.  The ClusterImagePolicy authority matches this image's
+# signature (issuer + subject) exactly.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signed-app
+  namespace: ${DEMO_NAMESPACE}
+  labels:
+    app: signed-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: signed-app
+  template:
+    metadata:
+      labels:
+        app: signed-app
+    spec:
+      containers:
+        - name: app
+          image: "${SIGNED_IMAGE}"

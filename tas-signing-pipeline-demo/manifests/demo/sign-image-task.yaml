@@ -1,0 +1,95 @@
+# Signs an already-pushed image with an arbitrary Keycloak identity, without
+# rebuilding or re-pushing it. Used for the wrong-identity negative scenario.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: sign-image
+  namespace: ${DEMO_NAMESPACE}
+spec:
+  params:
+    - name: image-ref
+      description: Already-pushed image, as repo@digest.
+      type: string
+    - name: keycloak-token-url
+      type: string
+    - name: oidc-client-id
+      type: string
+      default: trusted-artifact-signer
+    - name: oidc-username
+      description: Demo credential.
+      type: string
+    - name: oidc-password
+      type: string
+    - name: tuf-mirror-url
+      type: string
+    - name: tuf-root-url
+      type: string
+    - name: fulcio-url
+      type: string
+    - name: rekor-url
+      type: string
+    - name: tsa-url
+      description: RFC3161 timestamp endpoint.
+      type: string
+    - name: cosign-image
+      type: string
+    - name: curl-image
+      type: string
+  volumes:
+    - name: sigstorehome
+      emptyDir: {}
+  steps:
+    - name: get-oidc-token
+      image: $(params.curl-image)
+      env:
+        - name: OIDC_USERNAME
+          value: $(params.oidc-username)
+        - name: OIDC_PASSWORD
+          value: $(params.oidc-password)
+      results:
+        - name: id-token
+          description: Keycloak OIDC id_token for the given identity.
+      script: |
+        #!/bin/sh
+        set -eu
+        resp="$(curl -sf -X POST "$(params.keycloak-token-url)" \
+          --data-urlencode "grant_type=password" \
+          --data-urlencode "client_id=$(params.oidc-client-id)" \
+          --data-urlencode "username=${OIDC_USERNAME}" \
+          --data-urlencode "password=${OIDC_PASSWORD}" \
+          --data-urlencode "scope=openid email")"
+        token="$(printf '%s' "$resp" | grep -o '"id_token":"[^"]*"' | cut -d'"' -f4)"
+        [ -n "$token" ] || { echo "failed to obtain id_token: $resp" >&2; exit 1; }
+        printf '%s' "$token" | tee "$(step.results.id-token.path)" >/dev/null
+
+    - name: cosign-initialize
+      image: $(params.cosign-image)
+      command: ["cosign"]
+      args:
+        - "initialize"
+        - "--mirror=$(params.tuf-mirror-url)"
+        - "--root=$(params.tuf-root-url)"
+      env:
+        - name: HOME
+          value: /sigstorehome
+      volumeMounts:
+        - name: sigstorehome
+          mountPath: /sigstorehome
+
+    - name: cosign-sign
+      image: $(params.cosign-image)
+      command: ["cosign"]
+      args:
+        - "sign"
+        - "--yes"
+        - "--fulcio-url=$(params.fulcio-url)"
+        - "--rekor-url=$(params.rekor-url)"
+        - "--timestamp-server-url=$(params.tsa-url)"
+        - "--identity-token=$(steps.get-oidc-token.results.id-token)"
+        - "$(params.image-ref)"
+      env:
+        - name: HOME
+          value: /sigstorehome
+      volumeMounts:
+        - name: sigstorehome
+          mountPath: /sigstorehome

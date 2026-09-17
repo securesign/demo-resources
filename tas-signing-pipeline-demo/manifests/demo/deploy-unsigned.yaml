@@ -1,0 +1,22 @@
+# Negative scenario 1: an image copied into zot but never signed. Admission
+# should be blocked, no signature exists at all for this digest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unsigned-app
+  namespace: ${DEMO_NAMESPACE}
+  labels:
+    app: unsigned-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unsigned-app
+  template:
+    metadata:
+      labels:
+        app: unsigned-app
+    spec:
+      containers:
+        - name: app
+          image: "${UNSIGNED_IMAGE}"

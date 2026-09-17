@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${ZOT_NAMESPACE}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zot-config
+  namespace: ${ZOT_NAMESPACE}
+data:
+  config.json: |
+    {
+      "distSpecVersion": "1.1.1",
+      "storage": {
+        "rootDirectory": "/var/lib/registry",
+        "gc": true,
+        "gcDelay": "1h",
+        "gcInterval": "6h",
+        "dedupe": true
+      },
+      "http": {
+        "address": "0.0.0.0",
+        "port": "5000",
+        "realm": "zot",
+        "compat": ["docker2s2"],
+        "readTimeout": "600s",
+        "writeTimeout": "600s"
+      },
+      "log": {
+        "level": "info"
+      }
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zot-data
+  namespace: ${ZOT_NAMESPACE}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zot
+  namespace: ${ZOT_NAMESPACE}
+  labels:
+    app: zot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zot
+  template:
+    metadata:
+      labels:
+        app: zot
+    spec:
+      containers:
+        - name: zot
+          image: ghcr.io/project-zot/zot-linux-amd64:v2.1.20
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: config
+              mountPath: /etc/zot
+            - name: data
+              mountPath: /var/lib/registry
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+            initialDelaySeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: zot-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: zot-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zot
+  namespace: ${ZOT_NAMESPACE}
+spec:
+  selector:
+    app: zot
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    route.openshift.io/termination: edge
+    haproxy.router.openshift.io/timeout: 600s
+    haproxy.router.openshift.io/timeout-tunnel: 600s
+  name: zot
+  namespace: ${ZOT_NAMESPACE}
+spec:
+  rules:
+  - host: zot.${APPS_DOMAIN}
+    http:
+      paths:
+      - backend:
+          service:
+            name: zot
+            port:
+              name: http
+        path: /
+        pathType: Prefix

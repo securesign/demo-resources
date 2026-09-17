@@ -1,0 +1,34 @@
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  generateName: sign-wrong-identity-
+  namespace: ${DEMO_NAMESPACE}
+spec:
+  serviceAccountName: pipeline
+  taskRef:
+    name: sign-image
+  params:
+    - name: image-ref
+      value: "${WRONG_IDENTITY_IMAGE}"
+    - name: keycloak-token-url
+      value: "${KEYCLOAK_TOKEN_URL}"
+    - name: oidc-client-id
+      value: "${OIDC_CLIENT_ID}"
+    - name: oidc-username
+      value: "${WRONG_IDENTITY_USERNAME}"
+    - name: oidc-password
+      value: "${WRONG_IDENTITY_PASSWORD}"
+    - name: tuf-mirror-url
+      value: "${TUF_MIRROR_URL}"
+    - name: tuf-root-url
+      value: "${TUF_ROOT_URL}"
+    - name: fulcio-url
+      value: "https://${FULCIO_ROUTE}"
+    - name: rekor-url
+      value: "https://${REKOR_ROUTE}"
+    - name: tsa-url
+      value: "${TSA_URL}"
+    - name: cosign-image
+      value: "${COSIGN_ZOT_IMAGE}"
+    - name: curl-image
+      value: "${CURL_ZOT_IMAGE}"

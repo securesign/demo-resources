@@ -1,0 +1,20 @@
+apiVersion: policy.sigstore.dev/${CIP_API_VERSION}
+kind: ClusterImagePolicy
+metadata:
+  name: tas-demo-policy
+spec:
+  images:
+    - glob: "${ZOT_ROUTE}/rhtas-demo/**"
+  authorities:
+    - name: keycloak-signer
+      keyless:
+        url: "https://${FULCIO_ROUTE}"
+        trustRootRef: "${TRUST_ROOT_NAME}"
+        identities:
+          - issuer: "${KEYCLOAK_ISSUER}"
+            subject: "${SIGNER_EMAIL}"
+      ctlog:
+        url: "https://${REKOR_ROUTE}"
+        trustRootRef: "${TRUST_ROOT_NAME}"
+      rfc3161timestamp:
+        trustRootRef: "${TRUST_ROOT_NAME}"
